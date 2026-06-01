@@ -15,6 +15,12 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { Role } from '../auth/guards/role.enum';
 import { Roles } from '../auth/guards/roles.decorator';
 import { AuthGuard } from '../auth/guards/auth.guard';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 
 @Controller('products')
 export class ProductsController {
@@ -22,6 +28,10 @@ export class ProductsController {
 
   @UseGuards(AuthGuard)
   @Roles(Role.Admin)
+  @ApiOperation({ summary: 'Tạo sản phẩm mới' })
+  @ApiResponse({ status: 201, description: 'Sản phẩm được tạo thành công.' })
+  @ApiBody({})
+  @ApiBearerAuth()
   @Post()
   create(@Body() createProductDto: CreateProductDto) {
     return this.productsService.create(createProductDto);

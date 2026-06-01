@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, HttpException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Response } from 'express';
+import type { Response, Request } from 'express';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -15,7 +15,7 @@ import {
   PasswordDocument,
 } from '../passwords/schemas/password.schema';
 
-const ACCESS_TOKEN_TTL = '30m';
+const ACCESS_TOKEN_TTL = '15s';
 const REFRESH_TOKEN_TTL = '7d';
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
@@ -146,16 +146,13 @@ export class AuthService {
     });
 
     res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
       maxAge: COOKIE_MAX_AGE,
     });
 
     return { accessToken, role: user.role };
   }
 
-  refresh(refreshTokenDto: RefreshTokenDto, res: Response) {
+  async refresh(refreshTokenDto: RefreshTokenDto) {
     if (!refreshTokenDto.refreshToken) {
       throw new HttpException('Thiếu refresh token', 400);
     }
@@ -166,15 +163,19 @@ export class AuthService {
         this.getJwtSecret('REFRESH_TOKEN_SECRET'),
       ) as { userId: string; role: string };
 
-      const accessToken = this.signAccessToken(payload.userId, payload.role);
-      const newRefreshToken = this.signRefreshToken(payload.userId);
-
-      res.cookie('refreshToken', newRefreshToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        maxAge: COOKIE_MAX_AGE,
+      const session = await this.sessionModel.findOne({
+        refreshToken: refreshTokenDto.refreshToken,
+        userId: payload.userId,
       });
+
+      if (!session) {
+        throw new HttpException(
+          'Phiên làm việc không tồn tại hoặc đã hết hạn',
+          401,
+        );
+      }
+
+      const accessToken = this.signAccessToken(payload.userId, payload.role);
 
       return { accessToken, role: payload.role };
     } catch {
@@ -253,17 +254,20 @@ export class AuthService {
     return { message: 'Đổi mật khẩu thành công' };
   }
 
-  // async logout(req: Request, res: Response) {
-  //   const refreshTokenInCookie = req.cookies?.refreshToken;
+  async logout(req: Request, res: Response) {
+    const cookies = req.cookies as Record<string, string>;
+    const refreshTokenInCookie = cookies['refreshToken'];
 
-  //   if (refreshTokenInCookie) {
-  //     await this.sessionModel.deleteOne({ refreshToken: refreshTokenInCookie });
-  //     res.clearCookie('refreshToken', {
-  //       httpOnly: true,
-  //       secure: true,
-  //       sameSite: 'none',
-  //     });
-  //   }
-  //   return res.send({ message: 'Đăng xuất thành công' });
-  // }
+    console.log('Refresh token trong cookie:', refreshTokenInCookie);
+
+    if (!refreshTokenInCookie) {
+      throw new HttpException('Không tìm thấy refresh token trong cookie', 400);
+    }
+
+    await this.sessionModel.findOneAndDelete({
+      refreshToken: refreshTokenInCookie,
+    });
+    res.clearCookie('refreshToken');
+    return res.send({ message: 'Đăng xuất thành công', status: 204 });
+  }
 }

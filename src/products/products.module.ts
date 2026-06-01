@@ -14,5 +14,6 @@ import { PricesModule } from '../prices/price.module';
   ],
   controllers: [ProductsController],
   providers: [ProductsService],
+  exports: [ProductsService],
 })
 export class ProductsModule {}
