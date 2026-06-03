@@ -5,7 +5,6 @@ import {
   IsOptional,
   Matches,
   IsEmail,
-  MinLength,
 } from 'class-validator';
 export class RegisterDto {
   @IsString()
